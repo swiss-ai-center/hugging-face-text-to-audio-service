@@ -1,5 +1,7 @@
 import asyncio
+import json
 import time
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -20,14 +22,14 @@ from contextlib import asynccontextmanager
 
 # Imports required by the service's model
 # TODO: 1. ADD REQUIRED IMPORTS (ALSO IN THE REQUIREMENTS.TXT)
-
+import requests
 settings = get_settings()
 
 
 class MyService(Service):
     # TODO: 2. CHANGE THIS DESCRIPTION
     """
-    My service model
+    This service uses Hugging Face's model hub API to directly query text-to-audio AI models
     """
 
     # Any additional fields must be excluded for Pydantic to work
@@ -37,8 +39,8 @@ class MyService(Service):
     def __init__(self):
         super().__init__(
             # TODO: 3. CHANGE THE SERVICE NAME AND SLUG
-            name="My Service",
-            slug="my-service",
+            name="Hugging Face text-to-audio",
+            slug="hugging-face-text-to-audio",
             url=settings.service_url,
             summary=api_summary,
             description=api_description,
@@ -46,23 +48,24 @@ class MyService(Service):
             # TODO: 4. CHANGE THE INPUT AND OUTPUT FIELDS, THE TAGS AND THE HAS_AI VARIABLE
             data_in_fields=[
                 FieldDescription(
-                    name="image",
+                    name="json_description",
                     type=[
-                        FieldDescriptionType.IMAGE_PNG,
-                        FieldDescriptionType.IMAGE_JPEG,
+                        FieldDescriptionType.APPLICATION_JSON
                     ],
+                ),
+                FieldDescription(
+                    name="input_text",
+                    type=[
+                        FieldDescriptionType.TEXT_PLAIN
+                    ]
                 ),
             ],
             data_out_fields=[
                 FieldDescription(
-                    name="result", type=[FieldDescriptionType.APPLICATION_JSON]
+                    name="result", type=[FieldDescriptionType.AUDIO_OGG]
                 ),
             ],
             tags=[
-                ExecutionUnitTag(
-                    name=ExecutionUnitTagName.IMAGE_PROCESSING,
-                    acronym=ExecutionUnitTagAcronym.IMAGE_PROCESSING,
-                ),
             ],
             has_ai=False,
             # OPTIONAL: CHANGE THE DOCS URL TO YOUR SERVICE'S DOCS
@@ -79,9 +82,41 @@ class MyService(Service):
         # input_type = data["image"].type
         # ... do something with the raw data
 
-        # NOTE that the result must be a dictionary with the keys being the field names set in the data_out_fields
+        try:
+            json_description = json.loads(data['json_description'].data.decode('utf-8'))
+            api_token = json_description['api_token']
+            api_url = json_description['api_url']
+        except ValueError as err:
+            raise Exception(f"json_description is invalid: {str(err)}")
+        except KeyError as err:
+            raise Exception(f"api_url or api_token missing from json_description: {str(err)}")
+        headers = {"Authorization": f"Bearer {api_token}"}
+
+        def is_valid_json(json_string):
+            try:
+                json.loads(json_string)
+                return True
+            except ValueError:
+                return False
+
+        def text_to_audio_query(payload):
+            response = requests.post(api_url, headers=headers, json=payload)
+            return response.content
+
+        input_text_bytes = data['input_text'].data
+        json_input_text = f'{{ "inputs" : "{input_text_bytes.decode("utf-8")}" }}'
+        json_payload = json.loads(json_input_text)
+        result_data = text_to_audio_query(json_payload)
+
+        if is_valid_json(result_data):
+            json_data = json.loads(result_data)
+            if 'error' in json_data:
+                self._logger.error(json_data['error'])
+                raise Exception(json_data['error'])
+
         return {
-            "result": TaskData(data=..., type=FieldDescriptionType.APPLICATION_JSON)
+            "result": TaskData(data=result_data,
+                               type=FieldDescriptionType.AUDIO_OGG)
         }
 
 
@@ -136,18 +171,52 @@ async def lifespan(app: FastAPI):
 
 
 # TODO: 6. CHANGE THE API DESCRIPTION AND SUMMARY
-api_description = """My service
-bla bla bla...
-"""
-api_summary = """My service
-bla bla bla...
+api_description = """The service is used to query text-to-audio AI models from the Hugging Face inference API.\n
+
+ You can choose from any model available on the inference API from the [Hugging Face Hub](https://huggingface.co/models)
+ that takes a text(json) as input and outputs audio.
+
+It must take only one input text with the following structure:
+
+```
+{
+    "inputs" : "your input text"
+}
+```
+
+ This service takes two input files:
+  - A json file that defines the model you want to use and your access token.
+  - A text file.
+
+ json_description.json example:
+  ```
+ {
+    "api_token": "your_token",
+    "api_url": "https://api-inference.huggingface.co/models/facebook/musicgen-small"
+ }
+ ```
+ This model is a text-to-music model capable of generating high-quality music samples conditioned on text descriptions.
+
+ input_text example:
+
+ ```
+ liquid drum and bass, atmospheric synths, airy sounds
+ ```
+
+ The model may need some time to load on Hugging face's side, you may encounter an error on your first try.
+
+ Helpful trick: The answer from the inference API is cached, so if you encounter a loading error try to change the
+ input to check if the model is loaded.
+ """
+
+api_summary = """This service is used to query text-to-audio models from Hugging Face 
 """
 
 # Define the FastAPI application with information
 # TODO: 7. CHANGE THE API TITLE, VERSION, CONTACT AND LICENSE
 app = FastAPI(
     lifespan=lifespan,
-    title="Sample Service API.",
+    title="Hugging Face text-to-audio service",
     description=api_description,
     version="0.0.1",
     contact={
