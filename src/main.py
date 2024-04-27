@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import time
 
@@ -23,6 +24,8 @@ from contextlib import asynccontextmanager
 # Imports required by the service's model
 # TODO: 1. ADD REQUIRED IMPORTS (ALSO IN THE REQUIREMENTS.TXT)
 import requests
+import uvicorn
+from pydub import AudioSegment
 settings = get_settings()
 
 
@@ -41,7 +44,7 @@ class MyService(Service):
             # TODO: 3. CHANGE THE SERVICE NAME AND SLUG
             name="Hugging Face text-to-audio",
             slug="hugging-face-text-to-audio",
-            url=settings.service_url,
+            url="http://localhost:9090",
             summary=api_summary,
             description=api_description,
             status=ServiceStatus.AVAILABLE,
@@ -114,8 +117,9 @@ class MyService(Service):
                 self._logger.error(json_data['error'])
                 raise Exception(json_data['error'])
 
+        audio_segment = AudioSegment.from_file(io.BytesIO(result_data))
         return {
-            "result": TaskData(data=result_data,
+            "result": TaskData(data=audio_segment.export(format='ogg').read(),
                                type=FieldDescriptionType.AUDIO_OGG)
         }
 
@@ -176,7 +180,7 @@ api_description = """The service is used to query text-to-audio AI models from t
  You can choose from any model available on the inference API from the [Hugging Face Hub](https://huggingface.co/models)
  that takes a text(json) as input and outputs audio.
 
-It must take only one input text with the following structure:
+It must have the following input structure (json):
 
 ```
 {
@@ -189,13 +193,15 @@ It must take only one input text with the following structure:
   - A text file.
 
  json_description.json example:
+ 
   ```
  {
     "api_token": "your_token",
     "api_url": "https://api-inference.huggingface.co/models/facebook/musicgen-small"
  }
  ```
- This model is a text-to-music model capable of generating high-quality music samples conditioned on text descriptions.
+ 
+ This model example is a text-to-music model capable of generating music samples conditioned on text descriptions.
 
  input_text example:
 
@@ -251,3 +257,6 @@ app.add_middleware(
 @app.get("/", include_in_schema=False)
 async def root():
     return RedirectResponse("/docs", status_code=301)
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=9090)
