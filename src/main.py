@@ -17,8 +17,8 @@ from common_code.tasks.service import TasksService
 from common_code.tasks.models import TaskData
 from common_code.service.models import Service
 from common_code.service.enums import ServiceStatus
-from common_code.common.enums import FieldDescriptionType
-from common_code.common.models import FieldDescription
+from common_code.common.enums import FieldDescriptionType, ExecutionUnitTagName, ExecutionUnitTagAcronym
+from common_code.common.models import FieldDescription, ExecutionUnitTag
 from contextlib import asynccontextmanager
 
 # Imports required by the service's model
@@ -64,8 +64,15 @@ class MyService(Service):
                     name="result", type=[FieldDescriptionType.AUDIO_OGG]
                 ),
             ],
-            # TODO add an appropriate tag
             tags=[
+                ExecutionUnitTag(
+                    name=ExecutionUnitTagName.NATURAL_LANGUAGE_PROCESSING,
+                    acronym=ExecutionUnitTagAcronym.NATURAL_LANGUAGE_PROCESSING,
+                ),
+                ExecutionUnitTag(
+                    name=ExecutionUnitTagName.AUDIO_GENERATION,
+                    acronym=ExecutionUnitTagAcronym.AUDIO_GENERATION,
+                ),
             ],
             has_ai=True,
             docs_url="https://docs.swiss-ai-center.ch/reference/services/hugging-face-text-to-audio/",
