@@ -8,6 +8,8 @@ from common_code.tasks.models import TaskData
 # Imports required by the service's model
 import requests
 from pydub import AudioSegment
+import json
+import io
 
 settings = get_settings()
 api_description = """The service is used to query text-to-audio AI models from the Hugging Face inference API.\n
